@@ -59,3 +59,28 @@ class RateRepository(DatabaseHelper):
         async with self.session_factory() as session:
             count = await session.scalar(select(func.count()).select_from(Rate))
             return count
+
+
+    async def delete_rate(self, cargo_type: str, effective_date: str):
+        async with self.session_factory() as session:
+            rate = await session.execute(
+                select(Rate).where(Rate.cargo_type == cargo_type, Rate.effective_date == effective_date)
+            )
+            existing_rate = rate.scalars().first()
+            if existing_rate:
+                await session.delete(existing_rate)
+                await session.commit()
+            else:
+                raise RateNotFoundException(rate=cargo_type, date=effective_date)
+
+    async def edit_rate(self, cargo_type: str, effective_date: str, new_rate_value: float):
+        async with self.session_factory() as session:
+            rate = await session.execute(
+                select(Rate).where(Rate.cargo_type == cargo_type, Rate.effective_date == effective_date)
+            )
+            existing_rate = rate.scalars().first()
+            if existing_rate:
+                existing_rate.rate = new_rate_value
+                await session.commit()
+            else:
+                raise RateNotFoundException(rate=cargo_type, date=effective_date)

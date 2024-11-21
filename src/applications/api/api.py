@@ -3,7 +3,7 @@ from typing import Annotated
 
 import orjson
 import punq
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
 
 from src.applications.api.schemas import (
     ApiResponse,
@@ -15,10 +15,11 @@ from src.applications.api.schemas import (
 )
 from src.exceptions.base import ApplicationException
 from src.infrastructure.di import init_container
+from src.infrastructure.kafka import KafkaMessageBroker
 from src.infrastructure.repository import RateRepository
 
-router = APIRouter(tags=[""])
 
+router = APIRouter(tags=[""])
 
 @router.post(
     "/upload-rates/",
@@ -83,9 +84,14 @@ async def get_all_rates(
     pagination: Annotated[PaginationIn, Query()],
     container: Annotated[punq.Container, Depends(init_container)],
 ):
-    container: RateRepository = container.resolve(RateRepository)
-    rates = await container.get_all_rates(pagination)
-    count = await container.get_count_rate()
+    container_rate: RateRepository = container.resolve(RateRepository)
+    container_kafka: KafkaMessageBroker = container.resolve(KafkaMessageBroker)
+
+    rates = await container_rate.get_all_rates(pagination)
+    count = await container_rate.get_count_rate()
+
+    await container_kafka.log(f"Получение всего {rates}", 'admin', "ВСЕ")
+
     return ApiResponse(
         data=ListPaginatedResponse(
             items=rates,
@@ -97,3 +103,46 @@ async def get_all_rates(
             ),
         )
     )
+
+
+@router.delete(
+    "/rates/{cargo_type}/{effective_date}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Удалить тариф",
+)
+async def delete_rate(
+    cargo_type: str,
+    container: Annotated[punq.Container, Depends(init_container)],
+    effective_date: date = Path(description="yyyy-mm-dd"),
+):  
+    container: RateRepository = container.resolve(RateRepository)
+    try:
+        await container.delete_rate(cargo_type, effective_date)
+    except ApplicationException as exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": exception.message},
+        )
+    return {"message": "Тариф успешно удалён"}
+
+
+@router.patch(
+    "/rates/{cargo_type}/{effective_date}/",
+    status_code=status.HTTP_200_OK,
+    description="Редактировать тариф",
+)
+async def edit_rate(
+    cargo_type: str,
+    new_rate_value: float,
+    container: Annotated[punq.Container, Depends(init_container)],
+    effective_date: date = Path(description="yyyy-mm-dd"),
+):  
+    container: RateRepository = container.resolve(RateRepository)
+    try:
+        await container.edit_rate(cargo_type, effective_date, new_rate_value)
+    except ApplicationException as exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": exception.message},
+        )
+    return {"message": "Тариф успешно обновлен"}
