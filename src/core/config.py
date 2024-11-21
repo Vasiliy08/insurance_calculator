@@ -45,9 +45,14 @@ class DatabaseConfig(BaseSettings):
     }
 
 
+class KafkaSettings(BaseSettings):
+    KAFKA_URL: str
+
+
 class Settings(BaseSettings):
     logger: LoggingConfig = LoggingConfig()
     db_config: DatabaseConfig = DatabaseConfig()
+    kafka: KafkaSettings = KafkaSettings()
 
 
 settings = Settings()

@@ -6,12 +6,12 @@ from src.exceptions.base import ApplicationException
 
 @dataclass
 class RateNotFoundException(ApplicationException):
-    rate: str
+    cargo_type: str
     date: date
 
     @property
     def message(self):
-        return f"Нет соответствующей ставки для груза {self.rate} на дату {self.date}"
+        return f"Нет соответствующей ставки для груза {self.cargo_type} на дату {self.date}"
 
 
 @dataclass

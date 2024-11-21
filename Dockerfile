@@ -1,15 +1,14 @@
-FROM python:3.12.6-alpine
+FROM python:3.12.6-slim-bullseye
 
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-RUN apk update && \
-    apk upgrade && \
-    apk add postgresql-dev  \
+RUN apt update -y && \
+    apt upgrade -y && \
+    apt install -y python3-dev  \
     gcc \
-    python3-dev \
     musl-dev
 
 ADD pyproject.toml /app

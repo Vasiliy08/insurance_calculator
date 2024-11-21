@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 
 from sqlalchemy import desc, func, select
@@ -10,6 +11,7 @@ from src.infrastructure.models.rate import Rate
 class RateRepository(DatabaseHelper):
     async def update_rates_in_db(self, rates_data: dict):
         async with self.session_factory() as session:
+            old_rate = {}
             for date_str, rates in rates_data.items():
                 try:
                     effective_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -23,13 +25,15 @@ class RateRepository(DatabaseHelper):
                         select(Rate).where(Rate.cargo_type == cargo_type, Rate.effective_date == effective_date)
                     )
                     existing_rate = result.scalars().first()
-                    if existing_rate:
+                    if existing_rate and existing_rate.rate != rate_value:
+                        old_rate.setdefault(copy.deepcopy(existing_rate), rate_value)
                         existing_rate.rate = rate_value
                     else:
                         new_rate = Rate(cargo_type=cargo_type, rate=rate_value, effective_date=effective_date)
                         session.add(new_rate)
 
             await session.commit()
+            return old_rate
 
     async def calculate_insurance(self, cargo_type: str, declared_value: float, date: str):
         async with self.session_factory() as session:
@@ -41,7 +45,7 @@ class RateRepository(DatabaseHelper):
             rate = rate.scalars().first()
 
             if rate is None:
-                raise RateNotFoundException(rate=cargo_type, date=date)
+                raise RateNotFoundException(cargo_type=cargo_type, date=date)
 
             insurance_cost = declared_value * rate.rate
             return insurance_cost
@@ -60,7 +64,6 @@ class RateRepository(DatabaseHelper):
             count = await session.scalar(select(func.count()).select_from(Rate))
             return count
 
-
     async def delete_rate(self, cargo_type: str, effective_date: str):
         async with self.session_factory() as session:
             rate = await session.execute(
@@ -71,16 +74,24 @@ class RateRepository(DatabaseHelper):
                 await session.delete(existing_rate)
                 await session.commit()
             else:
-                raise RateNotFoundException(rate=cargo_type, date=effective_date)
+                raise RateNotFoundException(cargo_type=cargo_type, date=effective_date)
 
-    async def edit_rate(self, cargo_type: str, effective_date: str, new_rate_value: float):
+    async def edit_rate(
+        self,
+        cargo_type: str,
+        effective_date: str,
+        new_rate_value: float,
+    ):
         async with self.session_factory() as session:
             rate = await session.execute(
                 select(Rate).where(Rate.cargo_type == cargo_type, Rate.effective_date == effective_date)
             )
             existing_rate = rate.scalars().first()
             if existing_rate:
+                old_rate = existing_rate.rate
                 existing_rate.rate = new_rate_value
                 await session.commit()
             else:
-                raise RateNotFoundException(rate=cargo_type, date=effective_date)
+                raise RateNotFoundException(cargo_type=cargo_type, date=effective_date)
+
+            return old_rate

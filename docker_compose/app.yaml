@@ -9,9 +9,12 @@ services:
     ports:
     - "8000:8000"
     command: "uvicorn --factory src.main:web_app_factory --reload --host 0.0.0.0 --port 8000"
-    depends_on:
-      - postgres
     volumes:
       - ..:/app/
     env_file:
       - ../.env
+    # environment:
+    #   KAFKA_URL: ${KAFKA_URL:?}
+    depends_on:
+      kafka:
+        condition: service_healthy
